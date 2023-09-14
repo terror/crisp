@@ -12,4 +12,4 @@ forbid:
   ./bin/forbid
 
 run:
-  gcc -std=c99 -Wall crisp.c -lreadline && ./a.out
+  gcc -std=c99 -Wall crisp.c lib/mpc.c -lreadline -lm && ./a.out
