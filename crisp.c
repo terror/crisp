@@ -25,103 +25,147 @@ void add_history(char* unused) {}
 #include <editline/history.h>
 #endif
 
+enum {
+  ERROR,
+  NUMBER,
+  SEXPR,
+  SYMBOL
+};
+
 typedef struct {
-  int err;
+  char *error;
+  char *symbol;
+  int count;
   int type;
-  long num;
-} lval;
+  long number;
+  struct Value** cell;
+} Value;
 
-enum { LVAL_NUM, LVAL_ERR };
-enum { LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
+void print(Value* v);
 
-lval lval_num(long x) {
-  lval v;
-  v.type = LVAL_NUM;
-  v.num = x;
+Value* error(char *message) {
+  Value* v = malloc(sizeof(Value));
+  v->type = ERROR;
+  v->error = malloc(strlen(message) + 1);
+  strcpy(v->error, message);
   return v;
 }
 
-lval lval_err(int x) {
-  lval v;
-  v.type = LVAL_ERR;
-  v.err = x;
+Value* number(long x) {
+  Value* v = malloc(sizeof(Value));
+  v->type = NUMBER;
+  v->number = x;
   return v;
 }
 
-void lval_print(lval v) {
-  switch (v.type) {
-    case LVAL_NUM:
-      printf("%li", v.num);
-      break;
-    case LVAL_ERR:
-      if (v.err == LERR_DIV_ZERO)
-        printf("error: Division by zero");
-      if (v.err == LERR_BAD_OP)
-        printf("error: Invalid operator");
-      if (v.err == LERR_BAD_NUM)
-        printf("error: Invalid number");
-      break;
-  }
+Value* parse_number(mpc_ast_t* t) {
+  errno = 0;
+  long x = strtol(t->contents, NULL, 10);
+  return errno != ERANGE ? number(x) : error("Invalid number");
 }
 
-void lval_println(lval v) {
-  lval_print(v);
-  putchar('\n');
+Value* symbol(char *s) {
+  Value* v = malloc(sizeof(Value));
+  v->type = SYMBOL;
+  v->symbol = malloc(strlen(s) + 1);
+  strcpy(v->symbol, s);
+  return v;
 }
 
-lval eval_op(lval x, char *op, lval y) {
-  if (x.type == LVAL_ERR) return x;
-  if (y.type == LVAL_ERR) return y;
-
-  if (strcmp(op, "+") == 0) { return lval_num(x.num + y.num); }
-  if (strcmp(op, "-") == 0) { return lval_num(x.num - y.num); }
-  if (strcmp(op, "*") == 0) { return lval_num(x.num * y.num); }
-
-  if (strcmp(op, "/") == 0)
-    return y.num == 0 ?
-      lval_err(LERR_DIV_ZERO) :
-      lval_num(x.num / y.num);
-
-  return lval_err(LERR_BAD_OP);
+Value* sexpr(void) {
+  Value* v = malloc(sizeof(Value));
+  v->type = SEXPR;
+  v->count = 0;
+  v->cell = NULL;
+  return v;
 }
 
-lval eval(mpc_ast_t* t) {
-  if (strstr(t->tag, "number")) {
-    errno = 0;
-    long x = strtol(t->contents, NULL, 10);
-    return errno != ERANGE ? lval_num(x) : lval_err(LERR_BAD_NUM);
-  }
+Value* add(Value *a, Value *b) {
+  a->count++;
+  a->cell = realloc(a->cell, sizeof(Value*) * a->count);
+  a->cell[a->count - 1] = b;
+  return a;
+}
 
-  char* op = t->children[1]->contents;
-  lval x = eval(t->children[2]);
+Value* read(mpc_ast_t* t) {
+  if (strstr(t->tag, "number")) return parse_number(t);
+  if (strstr(t->tag, "symbol")) return symbol(t->contents);
 
-  int i = 3;
+  Value* x = NULL;
 
-  while (strstr(t->children[i]->tag, "expression")) {
-    x = eval_op(x, op, eval(t->children[i]));
-    ++i;
+  if (strcmp(t->tag, ">") == 0 || strstr(t->tag, "sexpr"))
+    x = sexpr();
+
+  for (int i = 0; i < t->children_num; ++i) {
+    if (
+      strcmp(t->children[i]->contents, "(") == 0
+        || strcmp(t->children[i]->contents, ")") == 0
+        || strcmp(t->children[i]->contents, "}") == 0
+        || strcmp(t->children[i]->contents, "{") == 0
+        || strcmp(t->children[i]->tag, "regex") == 0
+    ) continue;
+    x = add(x, read(t->children[i]));
   }
 
   return x;
 }
 
+void delete(Value* v) {
+  switch (v->type) {
+    case ERROR: free(v->error); break;
+    case NUMBER: break;
+    case SEXPR:
+      for (int i = 0; i < v->count; ++i)
+        delete(v->cell[i]);
+      free(v->cell);
+      break;
+    case SYMBOL: free(v->symbol); break;
+  }
+
+  free(v);
+}
+
+void print_expr(Value* v, char open, char close) {
+  putchar(open);
+
+  for (int i = 0; i < v->count; ++i) {
+    print(v->cell[i]);
+    if (i != (v->count - 1)) putchar(' ');
+  }
+
+  putchar(close);
+}
+
+void print(Value* v) {
+  switch (v->type) {
+    case ERROR: printf("error: %s", v->error); break;
+    case NUMBER: printf("%li", v->number); break;
+    case SEXPR: print_expr(v, '(', ')'); break;
+    case SYMBOL: printf("%s", v->symbol); break;
+  }
+}
+
+void println(Value* v) { print(v); putchar('\n'); }
+
 int main() {
   puts(":: crisp ::");
 
   mpc_parser_t* Number = mpc_new("number");
-  mpc_parser_t* Operator = mpc_new("operator");
-  mpc_parser_t* Expression = mpc_new("expression");
+  mpc_parser_t* Symbol = mpc_new("symbol");
+  mpc_parser_t* Sexpr = mpc_new("sexpr");
+  mpc_parser_t* Expr = mpc_new("expr");
   mpc_parser_t* Program = mpc_new("program");
 
   mpca_lang(
     MPCA_LANG_DEFAULT,
     " \
       number : /-?[0-9]+/ ; \
-      operator: '+' | '-' | '*' | '/' ; \
-      expression: <number> | '(' <operator> <expression>+ ')' ; \
-      program: /^/ <operator> <expression>+ /$/ ; \
+      symbol : '+' | '-' | '*' | '/' ; \
+      sexpr : '(' <expr>* ')' ; \
+      expr : <number> | <symbol> | <sexpr> ; \
+      program : /^/ <expr>* /$/ ; \
     ",
-    Number, Operator, Expression, Program
+    Number, Symbol, Sexpr, Expr, Program
   );
 
   while (1) {
@@ -132,8 +176,9 @@ int main() {
     mpc_result_t result;
 
     if (mpc_parse("<stdin>", input, Program, &result)) {
-      lval output = eval(result.output);
-      lval_println(output);
+      Value* x = read(result.output);
+      println(x);
+      delete(x);
       mpc_ast_delete(result.output);
     } else {
       mpc_err_print(result.error);
@@ -143,7 +188,7 @@ int main() {
     free(input);
   }
 
-  mpc_cleanup(4, Number, Operator, Expression, Program);
+  mpc_cleanup(5, Number, Symbol, Sexpr, Expr, Program);
 
   return 0;
 }
