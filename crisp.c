@@ -32,7 +32,7 @@ enum {
   SYMBOL
 };
 
-typedef struct {
+typedef struct Value {
   char *error;
   char *symbol;
   int count;
@@ -42,6 +42,7 @@ typedef struct {
 } Value;
 
 void print(Value* v);
+Value* eval(Value* v);
 
 Value* error(char *message) {
   Value* v = malloc(sizeof(Value));
@@ -145,7 +146,87 @@ void print(Value* v) {
   }
 }
 
-void println(Value* v) { print(v); putchar('\n'); }
+void println(Value* v) {
+  print(v);
+  putchar('\n');
+}
+
+Value* pop(Value* v, int i) {
+  Value* x = v->cell[i];
+  memmove(&v->cell[i], &v->cell[i + 1], sizeof(Value*) * (v->count - i - 1));
+  v->count--;
+  v->cell = realloc(v->cell, sizeof(Value*) * v->count);
+  return x;
+}
+
+Value* take(Value* v, int i) {
+  Value* x = pop(v, i);
+  delete(v);
+  return x;
+}
+
+Value* eval_op(Value* a, char* op) {
+  for (int i = 0; i < a->count; ++i)
+    if (a->cell[i]->type != NUMBER)
+      return error("Cannot operate on non-number");
+
+  Value* x = pop(a, 0);
+
+  if (strcmp(op, "-") == 0 && a->count == 0)
+    x->number = -x->number;
+
+  while (a->count > 0) {
+    Value* y = pop(a, 0);
+
+    if (strcmp(op, "+") == 0) x->number += y->number;
+    if (strcmp(op, "-") == 0) x->number -= y->number;
+    if (strcmp(op, "*") == 0) x->number *= y->number;
+    if (strcmp(op, "/") == 0) {
+      if (y->number == 0) {
+        delete(x);
+        delete(y);
+        x = error("Division by zero");
+        break;
+      }
+      x->number /= y->number;
+    }
+
+    delete(y);
+  }
+
+  delete(a);
+
+  return x;
+}
+
+Value* eval_sexpr(Value* v) {
+  for (int i = 0; i < v->count; ++i)
+    v->cell[i] = eval(v->cell[i]);
+
+  for (int i = 0; i < v->count; ++i)
+    if (v->cell[i]->type == ERROR) return take(v, i);
+
+  if (v->count == 0) return v;
+  if (v->count == 1) return take(v, 0);
+
+  Value* f = pop(v, 0);
+
+  if (f->type != SYMBOL) {
+    delete(f);
+    delete(v);
+    return error("s-expression does not start with symbol");
+  }
+
+  Value* result = eval_op(v, f->symbol);
+
+  delete(f);
+
+  return result;
+}
+
+Value* eval(Value* v) {
+  return v->type == SEXPR ? eval_sexpr(v) : v;
+}
 
 int main() {
   puts(":: crisp ::");
@@ -176,7 +257,7 @@ int main() {
     mpc_result_t result;
 
     if (mpc_parse("<stdin>", input, Program, &result)) {
-      Value* x = read(result.output);
+      Value* x = eval(read(result.output));
       println(x);
       delete(x);
       mpc_ast_delete(result.output);
