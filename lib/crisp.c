@@ -8,6 +8,8 @@
 #include <emscripten.h>
 #endif
 
+#define LASSERT(args, cond, err) if (!(cond)) { delete(args); return error(err); }
+
 enum {
   ERROR,
   NUMBER,
@@ -249,11 +251,33 @@ Value* eval(Value* v) {
   return v->type == SEXPR ? eval_sexpr(v) : v;
 }
 
-#define LASSERT(args, cond, err) \
-  if (!(cond)) { \
-    delete(args); \
-    return error(err); \
-  }
+Value* builtin_cons(Value *a) {
+  LASSERT(a, a->count == 2, "Function 'cons' passed incorrect number of arguments");
+  LASSERT(a, a->cell[1]->type == QEXPR, "Function 'cons' passed incorrect type");
+
+  Value* x = pop(a, 0);
+  Value* y = pop(a, 0);
+
+  y->count++;
+
+  y->cell = realloc(y->cell, sizeof(Value*) * y->count);
+
+  memmove(&y->cell[1], &y->cell[0], sizeof(Value*) * (y->count - 1));
+
+  y->cell[0] = x;
+
+  return y;
+}
+
+Value* builtin_eval(Value* a) {
+  LASSERT(a, a->count == 1, "Function 'eval' passed too many arguments");
+  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'eval' passed incorrect type");
+
+  Value* x = take(a, 0);
+  x->type = SEXPR;
+
+  return eval(x);
+}
 
 Value* builtin_head(Value* a) {
   LASSERT(a, a->count == 1, "Function 'head' passed too many arguments");
@@ -267,21 +291,16 @@ Value* builtin_head(Value* a) {
   return v;
 }
 
-Value* builtin_tail(Value* a) {
-  LASSERT(a, a->count == 1, "Function 'tail' passed too many arguments");
-  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'tail' passed incorrect type");
-  LASSERT(a, a->cell[0]->count != 0, "Function 'tail' passed {}");
+Value* builtin_init(Value *a) {
+  LASSERT(a, a->count == 1, "Function 'init' passed too many arguments");
+  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'init' passed incorrect type");
+  LASSERT(a, a->cell[0]->count != 0, "Function 'init' passed {}");
 
-  Value* v = take(a, 0);
+  Value* x = take(a, 0);
 
-  delete(pop(v, 0));
+  delete(pop(x, x->count - 1));
 
-  return v;
-}
-
-Value* builtin_list(Value* a) {
-  a->type = QEXPR;
-  return a;
+  return x;
 }
 
 Value* builtin_join(Value* a) {
@@ -307,26 +326,35 @@ Value* builtin_len(Value *a) {
   return x;
 }
 
+Value* builtin_list(Value* a) {
+  a->type = QEXPR;
+  return a;
+}
+
+Value* builtin_tail(Value* a) {
+  LASSERT(a, a->count == 1, "Function 'tail' passed too many arguments");
+  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'tail' passed incorrect type");
+  LASSERT(a, a->cell[0]->count != 0, "Function 'tail' passed {}");
+
+  Value* v = take(a, 0);
+
+  delete(pop(v, 0));
+
+  return v;
+}
+
 Value* builtin(Value* a, char* func) {
-  if (strcmp("list", func) == 0) return builtin_list(a);
-  if (strcmp("head", func) == 0) return builtin_head(a);
-  if (strcmp("tail", func) == 0) return builtin_tail(a);
+  if (strcmp("cons", func) == 0) return builtin_cons(a);
   if (strcmp("eval", func) == 0) return builtin_eval(a);
+  if (strcmp("head", func) == 0) return builtin_head(a);
+  if (strcmp("init", func) == 0) return builtin_init(a);
   if (strcmp("join", func) == 0) return builtin_join(a);
   if (strcmp("len", func) == 0) return builtin_len(a);
+  if (strcmp("list", func) == 0) return builtin_list(a);
+  if (strcmp("tail", func) == 0) return builtin_tail(a);
   if (strstr("+-/*", func)) return eval_op(a, func);
   delete(a);
   return error("Unknown function");
-}
-
-Value* builtin_eval(Value* a) {
-  LASSERT(a, a->count == 1, "Function 'eval' passed too many arguments");
-  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'eval' passed incorrect type");
-
-  Value* x = take(a, 0);
-  x->type = SEXPR;
-
-  return eval(x);
 }
 
 #ifdef EMSCRIPTEN
@@ -348,7 +376,8 @@ char* run(char* input) {
     MPCA_LANG_DEFAULT,
     " \
       number : /-?[0-9]+/ ; \
-      symbol : \"list\" | \"head\" | \"tail\" | \"join\" | \"eval\" | \"len\" | \"cons\" | '+' | '-' | '*' | '/' | '%' ; \
+      symbol : \"list\" | \"head\" | \"tail\" | \"join\" | \"eval\" | \"len\" | \"cons\" | \"init\"  \
+             | '+' | '-' | '*' | '/' | '%' ; \
       sexpr : '(' <expr>* ')' ; \
       qexpr : '{' <expr>* '}' ; \
       expr : <number> | <symbol> | <sexpr> | <qexpr> ; \
