@@ -11,6 +11,7 @@
 enum {
   ERROR,
   NUMBER,
+  QEXPR,
   SEXPR,
   SYMBOL
 };
@@ -64,6 +65,14 @@ Value* sexpr(void) {
   return v;
 }
 
+Value* qexpr(void) {
+  Value* v = malloc(sizeof(Value));
+  v->type = QEXPR;
+  v->count = 0;
+  v->cell = NULL;
+  return v;
+}
+
 Value* add(Value *a, Value *b) {
   a->count++;
   a->cell = realloc(a->cell, sizeof(Value*) * a->count);
@@ -79,6 +88,8 @@ Value* read(mpc_ast_t* t) {
 
   if (strcmp(t->tag, ">") == 0 || strstr(t->tag, "sexpr"))
     x = sexpr();
+
+  if (strstr(t->tag, "qexpr")) x = qexpr();
 
   for (int i = 0; i < t->children_num; ++i) {
     if (
@@ -99,6 +110,7 @@ void delete(Value* v) {
     case ERROR: free(v->error); break;
     case NUMBER: break;
     case SEXPR:
+    case QEXPR:
       for (int i = 0; i < v->count; ++i)
         delete(v->cell[i]);
       free(v->cell);
@@ -107,6 +119,21 @@ void delete(Value* v) {
   }
 
   free(v);
+}
+
+str_builder_t* to_string_helper(Value* v, char open, char close) {
+  str_builder_t* output = str_builder_create();
+
+  str_builder_add_char(output, open);
+
+  for (int i = 0; i < v->count; ++i) {
+    str_builder_add_builder(output, to_string(v->cell[i]), 0);
+    if (i != (v->count - 1)) str_builder_add_char(output, ' ');
+  }
+
+  str_builder_add_char(output, close);
+
+  return output;
 }
 
 str_builder_t* to_string(Value* v) {
@@ -121,12 +148,10 @@ str_builder_t* to_string(Value* v) {
       str_builder_add_int(output, v->number);
       break;
     case SEXPR:
-      str_builder_add_char(output, '(');
-      for (int i = 0; i < v->count; ++i) {
-        str_builder_add_builder(output, to_string(v->cell[i]), 0);
-        if (i != (v->count - 1)) str_builder_add_char(output, ' ');
-      }
-      str_builder_add_char(output, ')');
+      str_builder_add_builder(output, to_string_helper(v, '(', ')'), 0);
+      break;
+    case QEXPR:
+      str_builder_add_builder(output, to_string_helper(v, '{', '}'), 0);
       break;
     case SYMBOL:
       str_builder_add_str(output, v->symbol, 0);
@@ -226,6 +251,7 @@ char* run(char* input) {
   mpc_parser_t* Number = mpc_new("number");
   mpc_parser_t* Symbol = mpc_new("symbol");
   mpc_parser_t* Sexpr = mpc_new("sexpr");
+  mpc_parser_t* Qexpr = mpc_new("qexpr");
   mpc_parser_t* Expr = mpc_new("expr");
   mpc_parser_t* Program = mpc_new("program");
 
@@ -235,10 +261,11 @@ char* run(char* input) {
       number : /-?[0-9]+/ ; \
       symbol : '+' | '-' | '*' | '/' | '%' ; \
       sexpr : '(' <expr>* ')' ; \
-      expr : <number> | <symbol> | <sexpr> ; \
+      qexpr : '{' <expr>* '}' ; \
+      expr : <number> | <symbol> | <sexpr> | <qexpr> ; \
       program : /^/ <expr>* /$/ ; \
     ",
-    Number, Symbol, Sexpr, Expr, Program
+    Number, Symbol, Sexpr, Qexpr, Expr, Program
   );
 
   mpc_result_t result;
@@ -253,7 +280,7 @@ char* run(char* input) {
     mpc_err_delete(result.error);
   }
 
-  mpc_cleanup(5, Number, Symbol, Sexpr, Expr, Program);
+  mpc_cleanup(6, Number, Symbol, Sexpr, Qexpr, Expr, Program);
 
   output = str_builder_dump(sb, NULL);
   str_builder_destroy(sb);
