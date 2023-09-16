@@ -297,12 +297,23 @@ Value* builtin_join(Value* a) {
   return x;
 }
 
+Value* builtin_len(Value *a) {
+  LASSERT(a, a->count == 1, "Function 'len' passed too many arguments");
+  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'len' passed incorrect type");
+
+  Value* x = number(a->cell[0]->count);
+  delete(a);
+
+  return x;
+}
+
 Value* builtin(Value* a, char* func) {
   if (strcmp("list", func) == 0) return builtin_list(a);
   if (strcmp("head", func) == 0) return builtin_head(a);
   if (strcmp("tail", func) == 0) return builtin_tail(a);
   if (strcmp("eval", func) == 0) return builtin_eval(a);
   if (strcmp("join", func) == 0) return builtin_join(a);
+  if (strcmp("len", func) == 0) return builtin_len(a);
   if (strstr("+-/*", func)) return eval_op(a, func);
   delete(a);
   return error("Unknown function");
@@ -337,7 +348,7 @@ char* run(char* input) {
     MPCA_LANG_DEFAULT,
     " \
       number : /-?[0-9]+/ ; \
-      symbol : \"list\" | \"head\" | \"tail\" | \"join\" | \"eval\" | '+' | '-' | '*' | '/' | '%' ; \
+      symbol : \"list\" | \"head\" | \"tail\" | \"join\" | \"eval\" | \"len\" | \"cons\" | '+' | '-' | '*' | '/' | '%' ; \
       sexpr : '(' <expr>* ')' ; \
       qexpr : '{' <expr>* '}' ; \
       expr : <number> | <symbol> | <sexpr> | <qexpr> ; \
