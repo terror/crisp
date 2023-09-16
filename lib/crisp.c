@@ -166,6 +166,8 @@ Value* eval_op(Value* a, char* op) {
     if (strcmp(op, "+") == 0) x->number += y->number;
     if (strcmp(op, "-") == 0) x->number -= y->number;
     if (strcmp(op, "*") == 0) x->number *= y->number;
+    if (strcmp(op, "%") == 0) x->number %= y->number;
+
     if (strcmp(op, "/") == 0) {
       if (y->number == 0) {
         delete(x);
@@ -231,7 +233,7 @@ char* run(char* input) {
     MPCA_LANG_DEFAULT,
     " \
       number : /-?[0-9]+/ ; \
-      symbol : '+' | '-' | '*' | '/' ; \
+      symbol : '+' | '-' | '*' | '/' | '%' ; \
       sexpr : '(' <expr>* ')' ; \
       expr : <number> | <symbol> | <sexpr> ; \
       program : /^/ <expr>* /$/ ; \
