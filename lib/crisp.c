@@ -247,7 +247,7 @@ char* run(char* input) {
     delete(x);
     mpc_ast_delete(result.output);
   } else {
-    mpc_err_print(result.error);
+    str_builder_add_str(sb, mpc_err_string(result.error), 0);
     mpc_err_delete(result.error);
   }
 

@@ -1,40 +1,53 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <title>crisp</title>
-  <meta charset="UTF-8">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
+  <head>
+    <title>crisp</title>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <p>crisp playground 🍂</p>
 
-<p>crisp playground 🍂</p>
-<textarea id="inputArea" rows="4" cols="50" placeholder="Enter your code"></textarea>
-<div/>
-<button onclick="evaluateCode()">Evaluate</button>
-<p id="result"></p>
+    <textarea
+      id="inputArea"
+      rows="4"
+      cols="50"
+      placeholder="Enter your code..."
+    ></textarea>
 
-<script>
-  var Module = {
-    onRuntimeInitialized: function() {
-      console.log("WebAssembly loaded");
-    }
-  };
+    <br />
 
-  const evaluateCode = () => {
-    if (typeof Module._run === "function") {
-      const str = document.getElementById("inputArea").value;
-      const inputBuffer = Module._malloc(str.length + 1);
-      Module.stringToUTF8(str, inputBuffer, str.length + 1);
-      const resultPointer = Module.ccall("run", "number", ["number"], [inputBuffer]);
-      const resultString = Module.UTF8ToString(resultPointer);
-      Module._free(inputBuffer);
-      document.getElementById("result").innerHTML = 'output: ' + resultString;
-    } else {
-      console.log("WebAssembly module has not loaded yet, or 'run' function is not available.");
-    }
-  };
-</script>
+    <button onclick="evaluateCode()">Evaluate</button>
 
-<script async type="text/javascript" src="index.js"></script>
-</body>
+    <p id="result"></p>
+
+    <script>
+      var Module = {
+        onRuntimeInitialized: () => console.log('WebAssembly loaded'),
+      };
+
+      const evaluateCode = () => {
+        if (typeof Module._run === 'function') {
+          const str = document.getElementById('inputArea').value;
+          const inputBuffer = Module._malloc(str.length + 1);
+          Module.stringToUTF8(str, inputBuffer, str.length + 1);
+          const resultPointer = Module.ccall(
+            'run',
+            'number',
+            ['number'],
+            [inputBuffer]
+          );
+          const resultString = Module.UTF8ToString(resultPointer);
+          Module._free(inputBuffer);
+          document.getElementById('result').innerHTML = resultString;
+        } else {
+          console.log(
+            "WebAssembly module has not loaded yet, or 'run' function is not available."
+          );
+        }
+      };
+    </script>
+
+    <script async type="text/javascript" src="index.js"></script>
+  </body>
 </html>

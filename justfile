@@ -14,6 +14,9 @@ dev-deps:
   brew tap oven-sh/bun
   brew install bun emscripten
 
+fmt:
+  prettier --write .
+
 forbid:
   ./bin/forbid
 
@@ -26,6 +29,6 @@ serve:
 wasm:
   emcc lib/crisp.c lib/str_builder.c lib/mpc.c \
     -s EXPORTED_FUNCTIONS="['_malloc', '_free']" \
-    -s EXPORTED_RUNTIME_METHODS="['ccall', 'cwrap', 'stringToUTF8', 'UTF8ToString']" \
+    -s EXPORTED_RUNTIME_METHODS="['ccall', 'stringToUTF8', 'UTF8ToString']" \
     -s WASM=1 \
     -o www/index.js

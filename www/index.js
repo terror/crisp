@@ -1346,19 +1346,6 @@ function dbg(text) {
       return ret;
     };
 
-  
-  
-    /**
-     * @param {string=} returnType
-     * @param {Array=} argTypes
-     * @param {Object=} opts
-     */
-  var cwrap = (ident, returnType, argTypes, opts) => {
-      return function() {
-        return ccall(ident, returnType, argTypes, arguments, opts);
-      }
-    };
-
 
 function checkIncomingModuleAPI() {
   ignoredModuleProp('fetchSettings');
@@ -1390,7 +1377,6 @@ var dynCall_jiji = Module['dynCall_jiji'] = createExportWrapper('dynCall_jiji');
 // === Auto-generated postamble setup entry stuff ===
 
 Module['ccall'] = ccall;
-Module['cwrap'] = cwrap;
 Module['UTF8ToString'] = UTF8ToString;
 Module['stringToUTF8'] = stringToUTF8;
 var missingLibrarySymbols = [
@@ -1450,6 +1436,7 @@ var missingLibrarySymbols = [
   'STACK_ALIGN',
   'POINTER_SIZE',
   'ASSERTIONS',
+  'cwrap',
   'uleb128Encode',
   'sigToWasmTypes',
   'generateFuncType',
