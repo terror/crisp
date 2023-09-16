@@ -27,7 +27,8 @@ serve:
 
 wasm:
   emcc lib/crisp.c lib/str_builder.c lib/mpc.c \
-    -s WASM=1 \
+    -s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE="['\$stringToUTF8', '\$lengthBytesUTF8', '\$UTF8ToString']" \
     -s EXPORTED_FUNCTIONS="['_malloc', '_free']" \
-    -s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE="['\$stringToUTF8', '\$lengthBytesUTF8']" \
+    -s EXPORTED_RUNTIME_METHODS="['ccall', 'cwrap', 'stringToUTF8', 'UTF8ToString']" \
+    -s WASM=1 \
     -o www/index.js

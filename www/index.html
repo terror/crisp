@@ -2,10 +2,16 @@
 <html>
 <head>
   <title>crisp</title>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<button onclick="eval()">eval</button>
+<p>crisp playground 🍂</p>
+<textarea id="inputArea" rows="4" cols="50" placeholder="Enter your code"></textarea>
+<div/>
+<button onclick="evaluateCode()">Evaluate</button>
+<p id="result"></p>
 
 <script>
   var Module = {
@@ -13,20 +19,20 @@
       console.log("WebAssembly loaded");
     }
   };
-</script>
 
-<script>
-  const eval = () => {
+  const evaluateCode = () => {
     if (typeof Module._run === "function") {
-      const str = "* 5 5";
-      const lengthBytes = lengthBytesUTF8(str) + 1;
-      const stringPtr = _malloc(lengthBytes);
-      stringToUTF8(str, stringPtr, lengthBytes);
-      const result = Module._run(stringPtr);
-      _free(stringPtr);
-      console.log(result);
+      const str = document.getElementById("inputArea").value;
+      const inputBuffer = Module._malloc(str.length + 1);
+      Module.stringToUTF8(str, inputBuffer, str.length + 1);
+      const resultPointer = Module.ccall("run", "number", ["number"], [inputBuffer]);
+      const resultString = Module.UTF8ToString(resultPointer);
+      Module._free(inputBuffer);
+      document.getElementById("result").innerHTML = 'output: ' + resultString;
+    } else {
+      console.log("WebAssembly module has not loaded yet, or 'run' function is not available.");
     }
-  }
+  };
 </script>
 
 <script async type="text/javascript" src="index.js"></script>
