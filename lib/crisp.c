@@ -27,6 +27,9 @@ typedef struct Value {
 
 str_builder_t* to_string(Value* v);
 Value* eval(Value* v);
+Value* pop(Value* v, int i);
+Value* builtin(Value* a, char* func);
+Value* builtin_eval(Value* a);
 
 Value* error(char *message) {
   Value* v = malloc(sizeof(Value));
@@ -119,6 +122,12 @@ void delete(Value* v) {
   }
 
   free(v);
+}
+
+Value* join(Value* x, Value* y) {
+  while (y->count) x = add(x, pop(y, 0));
+  delete(y);
+  return x;
 }
 
 str_builder_t* to_string_helper(Value* v, char open, char close) {
@@ -229,7 +238,7 @@ Value* eval_sexpr(Value* v) {
     return error("s-expression does not start with symbol");
   }
 
-  Value* result = eval_op(v, f->symbol);
+  Value* result = builtin(v, f->symbol);
 
   delete(f);
 
@@ -238,6 +247,75 @@ Value* eval_sexpr(Value* v) {
 
 Value* eval(Value* v) {
   return v->type == SEXPR ? eval_sexpr(v) : v;
+}
+
+#define LASSERT(args, cond, err) \
+  if (!(cond)) { \
+    delete(args); \
+    return error(err); \
+  }
+
+Value* builtin_head(Value* a) {
+  LASSERT(a, a->count == 1, "Function 'head' passed too many arguments");
+  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'head' passed incorrect type");
+  LASSERT(a, a->cell[0]->count != 0, "Function 'head' passed {}");
+
+  Value* v = take(a, 0);
+
+  while (v->count > 1) delete(pop(v, 1));
+
+  return v;
+}
+
+Value* builtin_tail(Value* a) {
+  LASSERT(a, a->count == 1, "Function 'tail' passed too many arguments");
+  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'tail' passed incorrect type");
+  LASSERT(a, a->cell[0]->count != 0, "Function 'tail' passed {}");
+
+  Value* v = take(a, 0);
+
+  delete(pop(v, 0));
+
+  return v;
+}
+
+Value* builtin_list(Value* a) {
+  a->type = QEXPR;
+  return a;
+}
+
+Value* builtin_join(Value* a) {
+  for (int i = 0; i < a->count; ++i)
+    LASSERT(a, a->cell[i]->type == QEXPR, "Function 'join' passed incorrect type");
+
+  Value* x = pop(a, 0);
+
+  while (a->count) x = add(x, pop(a, 0));
+
+  delete(a);
+
+  return x;
+}
+
+Value* builtin(Value* a, char* func) {
+  if (strcmp("list", func) == 0) return builtin_list(a);
+  if (strcmp("head", func) == 0) return builtin_head(a);
+  if (strcmp("tail", func) == 0) return builtin_tail(a);
+  if (strcmp("eval", func) == 0) return builtin_eval(a);
+  if (strcmp("join", func) == 0) return builtin_join(a);
+  if (strstr("+-/*", func)) return eval_op(a, func);
+  delete(a);
+  return error("Unknown function");
+}
+
+Value* builtin_eval(Value* a) {
+  LASSERT(a, a->count == 1, "Function 'eval' passed too many arguments");
+  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'eval' passed incorrect type");
+
+  Value* x = take(a, 0);
+  x->type = SEXPR;
+
+  return eval(x);
 }
 
 #ifdef EMSCRIPTEN
@@ -259,7 +337,7 @@ char* run(char* input) {
     MPCA_LANG_DEFAULT,
     " \
       number : /-?[0-9]+/ ; \
-      symbol : '+' | '-' | '*' | '/' | '%' ; \
+      symbol : \"list\" | \"head\" | \"tail\" | \"join\" | \"eval\" | '+' | '-' | '*' | '/' | '%' ; \
       sexpr : '(' <expr>* ')' ; \
       qexpr : '{' <expr>* '}' ; \
       expr : <number> | <symbol> | <sexpr> | <qexpr> ; \
