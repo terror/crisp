@@ -1,28 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <editline/readline.h>
-#include "lib/mpc.h"
 
-#ifdef _WIN32
-#include <string.h>
+#include "str_builder.h"
+#include "mpc.h"
 
-static char buffer[2048];
-
-char* readline(char* prompt) {
-  fputs(prompt, stdout);
-  fgets(buffer, 2048, stdin);
-  char* cpy = malloc(strlen(buffer)+1);
-  strcpy(cpy, buffer);
-  cpy[strlen(cpy)-1] = '\0';
-  return cpy;
-}
-
-void add_history(char* unused) {}
-#elif __APPLE__
-#include <editline/readline.h>
-#elif __linux
-#include <editline/readline.h>
-#include <editline/history.h>
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
 #endif
 
 enum {
@@ -41,7 +24,7 @@ typedef struct Value {
   struct Value** cell;
 } Value;
 
-void print(Value* v);
+str_builder_t* to_string(Value* v);
 Value* eval(Value* v);
 
 Value* error(char *message) {
@@ -126,29 +109,31 @@ void delete(Value* v) {
   free(v);
 }
 
-void print_expr(Value* v, char open, char close) {
-  putchar(open);
+str_builder_t* to_string(Value* v) {
+  str_builder_t* output = str_builder_create();
 
-  for (int i = 0; i < v->count; ++i) {
-    print(v->cell[i]);
-    if (i != (v->count - 1)) putchar(' ');
-  }
-
-  putchar(close);
-}
-
-void print(Value* v) {
   switch (v->type) {
-    case ERROR: printf("error: %s", v->error); break;
-    case NUMBER: printf("%li", v->number); break;
-    case SEXPR: print_expr(v, '(', ')'); break;
-    case SYMBOL: printf("%s", v->symbol); break;
+    case ERROR:
+      str_builder_add_str(output, "error: ", 0);
+      str_builder_add_str(output, v->error, 0);
+      break;
+    case NUMBER:
+      str_builder_add_int(output, v->number);
+      break;
+    case SEXPR:
+      str_builder_add_char(output, '(');
+      for (int i = 0; i < v->count; ++i) {
+        str_builder_add_builder(output, to_string(v->cell[i]), 0);
+        if (i != (v->count - 1)) str_builder_add_char(output, ' ');
+      }
+      str_builder_add_char(output, ')');
+      break;
+    case SYMBOL:
+      str_builder_add_str(output, v->symbol, 0);
+      break;
   }
-}
 
-void println(Value* v) {
-  print(v);
-  putchar('\n');
+  return output;
 }
 
 Value* pop(Value* v, int i) {
@@ -228,8 +213,13 @@ Value* eval(Value* v) {
   return v->type == SEXPR ? eval_sexpr(v) : v;
 }
 
-int main() {
-  puts(":: crisp ::");
+#ifdef EMSCRIPTEN
+EMSCRIPTEN_KEEPALIVE
+#endif
+char* run(char* input) {
+  char* output;
+
+  str_builder_t* sb = str_builder_create();
 
   mpc_parser_t* Number = mpc_new("number");
   mpc_parser_t* Symbol = mpc_new("symbol");
@@ -249,27 +239,22 @@ int main() {
     Number, Symbol, Sexpr, Expr, Program
   );
 
-  while (1) {
-    char *input = readline("> ");
+  mpc_result_t result;
 
-    add_history(input);
-
-    mpc_result_t result;
-
-    if (mpc_parse("<stdin>", input, Program, &result)) {
-      Value* x = eval(read(result.output));
-      println(x);
-      delete(x);
-      mpc_ast_delete(result.output);
-    } else {
-      mpc_err_print(result.error);
-      mpc_err_delete(result.error);
-    }
-
-    free(input);
+  if (mpc_parse("<stdin>", input, Program, &result)) {
+    Value* x = eval(read(result.output));
+    str_builder_add_builder(sb, to_string(x), 0);
+    delete(x);
+    mpc_ast_delete(result.output);
+  } else {
+    mpc_err_print(result.error);
+    mpc_err_delete(result.error);
   }
 
   mpc_cleanup(5, Number, Symbol, Sexpr, Expr, Program);
 
-  return 0;
+  output = str_builder_dump(sb, NULL);
+  str_builder_destroy(sb);
+
+  return output;
 }

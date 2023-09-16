@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>crisp</title>
+</head>
+<body>
+
+<button onclick="eval()">eval</button>
+
+<script>
+  var Module = {
+    onRuntimeInitialized: function() {
+      console.log("WebAssembly loaded");
+    }
+  };
+</script>
+
+<script>
+  const eval = () => {
+    if (typeof Module._run === "function") {
+      const str = "* 5 5";
+      const lengthBytes = lengthBytesUTF8(str) + 1;
+      const stringPtr = _malloc(lengthBytes);
+      stringToUTF8(str, stringPtr, lengthBytes);
+      const result = Module._run(stringPtr);
+      _free(stringPtr);
+      console.log(result);
+    }
+  }
+</script>
+
+<script async type="text/javascript" src="index.js"></script>
+</body>
+</html>
