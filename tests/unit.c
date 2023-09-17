@@ -46,3 +46,13 @@ Test(unit, join) {
 Test(unit, eval) {
   cr_assert(eq(str, run("(eval (cons + (cons 1 (cons 2 {}))))", NULL), "3"));
 }
+
+Test(unit, partial_evaluation) {
+  Env* env = env_new();
+
+  cr_assert(eq(str, run("def {add} (\\ {x y} {+ x y})", env), "()"));
+  cr_assert(eq(str, run("add 1 2", env), "3"));
+  cr_assert(eq(str, run("add 1", env), "(\\ {y} {+ x y})"));
+  cr_assert(eq(str, run("def {add-one} (add 1)", env), "()"));
+  cr_assert(eq(str, run("add-one 1", env), "2"));
+}

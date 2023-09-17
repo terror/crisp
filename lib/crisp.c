@@ -12,6 +12,7 @@
 struct Value;
 typedef struct Value Value;
 
+Env *env_copy(Env *e);
 Value *builtin(Value *a, char *func);
 Value *builtin_eval(Env *e, Value *a);
 Value *builtin_list(Env *e, Value *a);
@@ -194,7 +195,8 @@ void delete(Value *v) {
 Value *join(Value *x, Value *y) {
   while (y->count)
     x = add(x, pop(y, 0));
-  delete (y);
+  free(y->cell);
+  free(y);
   return x;
 }
 
@@ -279,7 +281,7 @@ Value *copy(Value *v) {
       x->builtin = v->builtin;
     } else {
       x->builtin = NULL;
-      x->env = env_new();
+      x->env = env_copy(v->env);
       x->args = copy(v->args);
       x->body = copy(v->body);
     }
