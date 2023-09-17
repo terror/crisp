@@ -20,14 +20,23 @@
     <p class="bold-text">
       <a class="no-decoration" href="/">crisp 🍂</a>
     </p>
+
     <p style="margin-top: -0.5em">
       a web playground for the crisp programming language
     </p>
 
+    <div class="example-container">
+      <select id="exampleSelect" onchange="loadExample()">
+        <option value="" disabled selected>Examples</option>
+        <option value="math">Math</option>
+        <option value="list">List operations</option>
+      </select>
+    </div>
+
     <div class="editor-container">
       <textarea id="inputArea"></textarea>
       <div class="button-container">
-        <button onclick="evaluateCode()">Run</button>
+        <button class="run-button" onclick="evaluateCode()">Run</button>
       </div>
     </div>
 
@@ -39,6 +48,19 @@
     <script>
       var Module = {
         onRuntimeInitialized: () => console.log('WebAssembly loaded'),
+      };
+
+      const examples = {
+        math: '(+ (% 3 2) (* 5 5 (+ 1 (/ 10 5))))',
+        list: 'head (tail (cons 1 (init (list 3 2 1))))',
+      };
+
+      const loadExample = () => {
+        const selectedExample = document.getElementById('exampleSelect').value;
+        const exampleCode = examples[selectedExample];
+        if (exampleCode) {
+          editor.setValue(exampleCode);
+        }
       };
 
       const editor = CodeMirror.fromTextArea(

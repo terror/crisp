@@ -39,10 +39,30 @@ a.no-decoration {
   justify-content: flex-end;
 }
 
+button.run-button {
+  background-color: #ff8c00;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: 0.3s;
+}
+
+button.run-button:hover {
+  background-color: #ff7f00;
+}
+
 #result {
   display: none;
   font-family: 'Courier New', Courier, monospace;
   border: 1px solid #ccc;
   overflow-y: auto;
   max-height: 200px;
+}
+
+.example-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1em;
 }
