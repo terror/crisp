@@ -4,42 +4,109 @@
     <title>crisp</title>
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.css"
+    />
+    <style>
+      p.bold-text {
+        font-weight: bold;
+      }
+
+      a.no-decoration {
+        text-decoration: none;
+        color: black;
+      }
+
+      .CodeMirror {
+        border: 1px solid #eee;
+      }
+
+      .editor-container {
+        display: flex;
+        width: 50%;
+        flex-direction: column;
+      }
+
+      .button-container {
+        display: flex;
+        margin-top: 0.5em;
+        margin-bottom: -0.5em;
+        justify-content: flex-end;
+      }
+
+      #result {
+        display: none; /* Initially set to none */
+        font-family: 'Courier New', Courier, monospace;
+        width: 50%;
+        border: 1px solid #ccc;
+        overflow-y: auto;
+        max-height: 200px;
+      }
+    </style>
   </head>
   <body>
-    <p>crisp playground 🍂</p>
+    <p class="bold-text">
+      <a class="no-decoration" href="/">crisp 🍂</a>
+    </p>
+    <p style="margin-top: -0.5em">
+      a web playground for the crisp programming language
+    </p>
 
-    <textarea
-      id="inputArea"
-      rows="4"
-      cols="50"
-      placeholder="Enter your code..."
-    ></textarea>
+    <div class="editor-container">
+      <textarea id="inputArea"></textarea>
+      <div class="button-container">
+        <button onclick="evaluateCode()">Run</button>
+      </div>
+    </div>
 
-    <br />
+    <pre id="result"></pre>
 
-    <button onclick="evaluateCode()">Evaluate</button>
-
-    <p id="result"></p>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/commonlisp/commonlisp.min.js"></script>
 
     <script>
       var Module = {
         onRuntimeInitialized: () => console.log('WebAssembly loaded'),
       };
 
+      const editor = CodeMirror.fromTextArea(
+        document.getElementById('inputArea'),
+        {
+          lineNumbers: true,
+          tabSize: 2,
+          theme: 'default',
+          mode: 'commonlisp',
+        }
+      );
+
+      editor.save();
+
       const evaluateCode = () => {
+        const resultElement = document.getElementById('result');
+
         if (typeof Module._run === 'function') {
-          const str = document.getElementById('inputArea').value;
+          const str = editor.getValue();
+
           const inputBuffer = Module._malloc(str.length + 1);
+
           Module.stringToUTF8(str, inputBuffer, str.length + 1);
+
           const resultPointer = Module.ccall(
             'run',
             'number',
             ['number'],
             [inputBuffer]
           );
+
           const resultString = Module.UTF8ToString(resultPointer);
+
           Module._free(inputBuffer);
-          document.getElementById('result').innerText = resultString;
+
+          if (resultString.trim() !== '') {
+            resultElement.style.display = 'block';
+            resultElement.innerText += `> ${resultString}\n`;
+          }
         } else {
           console.log(
             "WebAssembly module has not loaded yet, or 'run' function is not available."
