@@ -15,6 +15,7 @@ dev-deps:
   brew install bun emscripten
 
 fmt:
+  clang-format -i -style=file:.clang-format main.c lib/*.c
   prettier --write .
 
 forbid:
