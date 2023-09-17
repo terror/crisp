@@ -1,11 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <editline/readline.h>
+#include <string.h>
+
 #include "lib/crisp.h"
 
 #ifdef _WIN32
-#include <string.h>
-
 static char buffer[2048];
 
 char* readline(char* prompt) {
@@ -26,12 +25,11 @@ void add_history(char* unused) {}
 #endif
 
 int main() {
-  puts(":: crisp ::");
-
   Env* env = env_new();
 
   for (;;) {
     char *input = readline("> ");
+    if (strcmp(input, "exit") == 0) break;
     add_history(input);
     printf("%s\n", run(input, env));
     free(input);
