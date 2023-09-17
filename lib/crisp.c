@@ -20,7 +20,12 @@ str_builder_t* to_string(Value* v);
 void env_add_builtins(Env* e);
 void env_put(Env* e, Value* k, Value* v);
 
-#define LASSERT(args, cond, err) if (!(cond)) { delete(args); return error(err); }
+#define LASSERT(args, cond, fmt, ...) \
+  if (!(cond)) { \
+    Value* err = error(fmt, ##__VA_ARGS__); \
+    delete(args); \
+    return err; \
+  }
 
 enum {
   ERROR,
@@ -49,11 +54,15 @@ struct Env {
   Value **values;
 };
 
-Value* error(char *message) {
+Value* error(char *fmt, ...) {
   Value* v = malloc(sizeof(Value));
   v->type = ERROR;
-  v->error = malloc(strlen(message) + 1);
-  strcpy(v->error, message);
+  va_list va;
+  va_start(va, fmt);
+  v->error = malloc(512);
+  vsnprintf(v->error, 511, fmt, va);
+  v->error = realloc(v->error, strlen(v->error) + 1);
+  va_end(va);
   return v;
 }
 
@@ -67,7 +76,7 @@ Value* number(long x) {
 Value* parse_number(mpc_ast_t* t) {
   errno = 0;
   long x = strtol(t->contents, NULL, 10);
-  return errno != ERANGE ? number(x) : error("Invalid number");
+  return errno != ERANGE ? number(x) : error("Invalid number %s", t->contents);
 }
 
 Value* symbol(char *s) {
@@ -316,6 +325,18 @@ Value* eval(Env* e, Value* v) {
   return v->type == SEXPR ? eval_sexpr(e, v) : v;
 }
 
+char* type_name(int t) {
+  switch (t) {
+    case ERROR: return "Error";
+    case FUNCTION: return "Function";
+    case NUMBER: return "Number";
+    case QEXPR: return "Q-Expression";
+    case SEXPR: return "S-Expression";
+    case SYMBOL: return "Symbol";
+    default: return "Unknown";
+  }
+}
+
 Value* builtin_add(Env* e, Value* a) {
   return eval_op(e, a, "+");
 }
@@ -337,8 +358,23 @@ Value* builtin_mod(Env* e, Value* a) {
 }
 
 Value* builtin_cons(Env* e, Value *a) {
-  LASSERT(a, a->count == 2, "Function 'cons' passed incorrect number of arguments");
-  LASSERT(a, a->cell[1]->type == QEXPR, "Function 'cons' passed incorrect type");
+  LASSERT(
+    a,
+    a->count == 2,
+    "Function 'cons' passed incorrect number of arguments. "
+    "Got %i, Expected %i.",
+    a->count,
+    2
+  );
+
+  LASSERT(
+    a,
+    a->cell[1]->type == QEXPR,
+    "Function 'cons' passed incorrect type for argument 1. "
+    "Got %s, Expected %s.",
+    type_name(a->cell[1]->type),
+    type_name(QEXPR)
+  );
 
   Value* x = pop(a, 0);
   Value* y = pop(a, 0);
@@ -355,7 +391,14 @@ Value* builtin_cons(Env* e, Value *a) {
 }
 
 Value* builtin_def(Env* e, Value *a) {
-  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'def' passed incorrect type");
+  LASSERT(
+    a,
+    a->cell[0]->type == QEXPR,
+    "Function 'def' passed incorrect type. "
+    "Got %s, Expected %s.",
+    type_name(a->cell[0]->type),
+    type_name(QEXPR)
+  );
 
   Value* syms = a->cell[0];
 
@@ -365,7 +408,10 @@ Value* builtin_def(Env* e, Value *a) {
   LASSERT(
     a,
     syms->count == a->count - 1,
-    "Function 'def' cannot define incorrect number of values to symbols"
+    "Function 'def' cannot define incorrect number of values to symbols. "
+    "Got %i, Expected %i.",
+    syms->count,
+    a->count - 1
   );
 
   for (int i = 0; i < syms->count; ++i)
@@ -378,8 +424,23 @@ Value* builtin_def(Env* e, Value *a) {
 
 
 Value* builtin_eval(Env* e, Value* a) {
-  LASSERT(a, a->count == 1, "Function 'eval' passed too many arguments");
-  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'eval' passed incorrect type");
+  LASSERT(
+    a,
+    a->count == 1,
+    "Function 'eval' passed too many arguments. "
+    "Got %i, Expected %i.",
+    a->count,
+    1
+  );
+
+  LASSERT(
+    a,
+    a->cell[0]->type == QEXPR,
+    "Function 'eval' passed incorrect type. "
+    "Got %s, Expected %s.",
+    type_name(a->cell[0]->type),
+    type_name(QEXPR)
+  );
 
   Value* x = take(a, 0);
   x->type = SEXPR;
@@ -388,9 +449,29 @@ Value* builtin_eval(Env* e, Value* a) {
 }
 
 Value* builtin_head(Env* e, Value* a) {
-  LASSERT(a, a->count == 1, "Function 'head' passed too many arguments");
-  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'head' passed incorrect type");
-  LASSERT(a, a->cell[0]->count != 0, "Function 'head' passed {}");
+  LASSERT(
+    a,
+    a->count == 1,
+    "Function 'head' passed too many arguments. "
+    "Got %i, Expected %i.",
+    a->count,
+    1
+  );
+
+  LASSERT(
+    a,
+    a->cell[0]->type == QEXPR,
+    "Function 'head' passed incorrect type. "
+    "Got %s, Expected %s.",
+    type_name(a->cell[0]->type),
+    type_name(QEXPR)
+  );
+
+  LASSERT(
+    a,
+    a->cell[0]->count != 0,
+    "Function 'head' passed {}. Expected non-empty list."
+  );
 
   Value* v = take(a, 0);
 
@@ -400,9 +481,29 @@ Value* builtin_head(Env* e, Value* a) {
 }
 
 Value* builtin_init(Env* e, Value *a) {
-  LASSERT(a, a->count == 1, "Function 'init' passed too many arguments");
-  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'init' passed incorrect type");
-  LASSERT(a, a->cell[0]->count != 0, "Function 'init' passed {}");
+  LASSERT(
+    a,
+    a->count == 1,
+    "Function 'init' passed too many arguments. "
+    "Got %i, Expected %i.",
+    a->count,
+    1
+  );
+
+  LASSERT(
+    a,
+    a->cell[0]->type == QEXPR,
+    "Function 'init' passed incorrect type. "
+    "Got %s, Expected %s.",
+    type_name(a->cell[0]->type),
+    type_name(QEXPR)
+  );
+
+  LASSERT(
+    a,
+    a->cell[0]->count != 0,
+    "Function 'init' passed {}. Expected non-empty list"
+  );
 
   Value* x = take(a, 0);
 
@@ -413,7 +514,13 @@ Value* builtin_init(Env* e, Value *a) {
 
 Value* builtin_join(Env* e, Value* a) {
   for (int i = 0; i < a->count; ++i)
-    LASSERT(a, a->cell[i]->type == QEXPR, "Function 'join' passed incorrect type");
+    LASSERT(
+      a,
+      a->cell[i]->type == QEXPR,
+      "Function 'join' passed incorrect type. "
+      "Got %s, Expected %s.",
+      type_name(a->cell[i]->type), type_name(QEXPR)
+    );
 
   Value* x = pop(a, 0);
 
@@ -425,8 +532,23 @@ Value* builtin_join(Env* e, Value* a) {
 }
 
 Value* builtin_len(Env* e, Value *a) {
-  LASSERT(a, a->count == 1, "Function 'len' passed too many arguments");
-  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'len' passed incorrect type");
+  LASSERT(
+    a,
+    a->count == 1,
+    "Function 'len' passed too many arguments. "
+    "Got %i, Expected %i.",
+    a->count,
+    1
+  );
+
+  LASSERT(
+    a,
+    a->cell[0]->type == QEXPR,
+    "Function 'len' passed incorrect type. "
+    "Got %s, Expected %s.",
+    type_name(a->cell[0]->type),
+    type_name(QEXPR)
+  );
 
   Value* x = number(a->cell[0]->count);
   delete(a);
@@ -440,9 +562,29 @@ Value* builtin_list(Env* e, Value* a) {
 }
 
 Value* builtin_tail(Env* e, Value* a) {
-  LASSERT(a, a->count == 1, "Function 'tail' passed too many arguments");
-  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'tail' passed incorrect type");
-  LASSERT(a, a->cell[0]->count != 0, "Function 'tail' passed {}");
+  LASSERT(
+    a,
+    a->count == 1,
+    "Function 'tail' passed too many arguments. "
+    "Got %i, Expected %i.",
+    a->count,
+    1
+  );
+
+  LASSERT(
+    a,
+    a->cell[0]->type == QEXPR,
+    "Function 'tail' passed incorrect type. "
+    "Got %s, Expected %s.",
+    type_name(a->cell[0]->type),
+    type_name(QEXPR)
+  );
+
+  LASSERT(
+    a,
+    a->cell[0]->count != 0,
+    "Function 'tail' passed {}. Expected non-empty list."
+  );
 
   Value* v = take(a, 0);
 
