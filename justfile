@@ -27,7 +27,7 @@ serve:
 	python3 -m http.server 8000 --directory ./www
 
 wasm:
-  emcc lib/crisp.c lib/str_builder.c lib/mpc.c \
+  emcc lib/*.c \
     -s EXPORTED_FUNCTIONS="['_malloc', '_free']" \
     -s EXPORTED_RUNTIME_METHODS="['ccall', 'stringToUTF8', 'UTF8ToString']" \
     -s WASM=1 \
