@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches:
+    - master
+  pull_request:
+    branches:
+    - master
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  pages:
+    name: Pages
+
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: brew install emscripten
+
+    - name: Build WASM
+      run: |
+        emcc lib/*.c \
+          -s EXPORTED_FUNCTIONS="['_malloc', '_free']" \
+          -s EXPORTED_RUNTIME_METHODS="['ccall', 'stringToUTF8', 'UTF8ToString']" \
+          -s WASM=1 \
+          -o www/index.js
+
+    - name: Record Git Revision
+      run: git rev-parse --verify HEAD > www/commit.txt
+
+    - name: Deploy Pages
+      uses: peaceiris/actions-gh-pages@v3
+      if: github.ref == 'refs/heads/master'
+      with:
+        github_token: ${{secrets.PAT}}
+        publish_branch: gh-pages
+        publish_dir: www
