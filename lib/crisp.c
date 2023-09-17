@@ -1,37 +1,52 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "str_builder.h"
-#include "mpc.h"
-
 #ifdef EMSCRIPTEN
 #include <emscripten.h>
 #endif
+
+#include "crisp.h"
+#include "mpc.h"
+#include "str_builder.h"
+
+struct Value;
+typedef struct Value Value;
+
+Value* builtin(Value* a, char* func);
+Value* env_get(Env* e, Value* k);
+Value* eval(Env* e, Value* v);
+Value* pop(Value* v, int i);
+str_builder_t* to_string(Value* v);
+void env_add_builtins(Env* e);
 
 #define LASSERT(args, cond, err) if (!(cond)) { delete(args); return error(err); }
 
 enum {
   ERROR,
+  FUNCTION,
   NUMBER,
   QEXPR,
   SEXPR,
   SYMBOL
 };
 
-typedef struct Value {
+typedef Value* (*Builtin)(Env*, Value*);
+
+struct Value {
+  Builtin fun;
   char *error;
   char *symbol;
   int count;
   int type;
   long number;
   struct Value** cell;
-} Value;
+};
 
-str_builder_t* to_string(Value* v);
-Value* eval(Value* v);
-Value* pop(Value* v, int i);
-Value* builtin(Value* a, char* func);
-Value* builtin_eval(Value* a);
+struct Env {
+  int count;
+  char **symbols;
+  Value **values;
+};
 
 Value* error(char *message) {
   Value* v = malloc(sizeof(Value));
@@ -78,6 +93,13 @@ Value* qexpr(void) {
   return v;
 }
 
+Value* fun(Builtin func) {
+  Value* v = malloc(sizeof(Value));
+  v->type = FUNCTION;
+  v->fun = func;
+  return v;
+}
+
 Value* add(Value *a, Value *b) {
   a->count++;
   a->cell = realloc(a->cell, sizeof(Value*) * a->count);
@@ -113,6 +135,7 @@ Value* read(mpc_ast_t* t) {
 void delete(Value* v) {
   switch (v->type) {
     case ERROR: free(v->error); break;
+    case FUNCTION: break;
     case NUMBER: break;
     case SEXPR:
     case QEXPR:
@@ -167,6 +190,9 @@ str_builder_t* to_string(Value* v) {
     case SYMBOL:
       str_builder_add_str(output, v->symbol, 0);
       break;
+    case FUNCTION:
+      str_builder_add_str(output, "<function>", 0);
+      break;
   }
 
   return output;
@@ -186,7 +212,39 @@ Value* take(Value* v, int i) {
   return x;
 }
 
-Value* eval_op(Value* a, char* op) {
+Value* copy(Value* v) {
+  Value* x = malloc(sizeof(Value));
+
+  x->type = v->type;
+
+  switch (v->type) {
+    case ERROR:
+      x->error = malloc(strlen(v->error) + 1);
+      strcpy(x->error, v->error);
+      break;
+    case FUNCTION:
+      x->fun = v->fun;
+      break;
+    case NUMBER:
+      x->number = v->number;
+      break;
+    case SYMBOL:
+      x->symbol = malloc(strlen(v->symbol) + 1);
+      strcpy(x->symbol, v->symbol);
+      break;
+    case SEXPR:
+    case QEXPR:
+      x->count = v->count;
+      x->cell = malloc(sizeof(Value*) * x->count);
+      for (int i = 0; i < x->count; ++i)
+        x->cell[i] = copy(v->cell[i]);
+      break;
+  }
+
+  return x;
+}
+
+Value* eval_op(Env* _e, Value* a, char* op) {
   for (int i = 0; i < a->count; ++i)
     if (a->cell[i]->type != NUMBER)
       return error("Cannot operate on non-number");
@@ -222,9 +280,9 @@ Value* eval_op(Value* a, char* op) {
   return x;
 }
 
-Value* eval_sexpr(Value* v) {
+Value* eval_sexpr(Env* e, Value* v) {
   for (int i = 0; i < v->count; ++i)
-    v->cell[i] = eval(v->cell[i]);
+    v->cell[i] = eval(e, v->cell[i]);
 
   for (int i = 0; i < v->count; ++i)
     if (v->cell[i]->type == ERROR) return take(v, i);
@@ -234,24 +292,50 @@ Value* eval_sexpr(Value* v) {
 
   Value* f = pop(v, 0);
 
-  if (f->type != SYMBOL) {
+  if (f->type != FUNCTION) {
     delete(f);
     delete(v);
     return error("s-expression does not start with symbol");
   }
 
-  Value* result = builtin(v, f->symbol);
+  Value* result = f->fun(e, v);
 
   delete(f);
 
   return result;
 }
 
-Value* eval(Value* v) {
-  return v->type == SEXPR ? eval_sexpr(v) : v;
+Value* eval(Env* e, Value* v) {
+  if (v->type == SYMBOL) {
+    Value* x = env_get(e, v);
+    delete(v);
+    return x;
+  }
+
+  return v->type == SEXPR ? eval_sexpr(e, v) : v;
 }
 
-Value* builtin_cons(Value *a) {
+Value* builtin_add(Env* e, Value* a) {
+  return eval_op(e, a, "+");
+}
+
+Value* builtin_sub(Env* e, Value* a) {
+  return eval_op(e, a, "-");
+}
+
+Value* builtin_mul(Env* e, Value* a) {
+  return eval_op(e, a, "*");
+}
+
+Value* builtin_div(Env* e, Value* a) {
+  return eval_op(e, a, "/");
+}
+
+Value* builtin_mod(Env* e, Value* a) {
+  return eval_op(e, a, "%");
+}
+
+Value* builtin_cons(Env* e, Value *a) {
   LASSERT(a, a->count == 2, "Function 'cons' passed incorrect number of arguments");
   LASSERT(a, a->cell[1]->type == QEXPR, "Function 'cons' passed incorrect type");
 
@@ -269,17 +353,17 @@ Value* builtin_cons(Value *a) {
   return y;
 }
 
-Value* builtin_eval(Value* a) {
+Value* builtin_eval(Env* e, Value* a) {
   LASSERT(a, a->count == 1, "Function 'eval' passed too many arguments");
   LASSERT(a, a->cell[0]->type == QEXPR, "Function 'eval' passed incorrect type");
 
   Value* x = take(a, 0);
   x->type = SEXPR;
 
-  return eval(x);
+  return eval(e, x);
 }
 
-Value* builtin_head(Value* a) {
+Value* builtin_head(Env* e, Value* a) {
   LASSERT(a, a->count == 1, "Function 'head' passed too many arguments");
   LASSERT(a, a->cell[0]->type == QEXPR, "Function 'head' passed incorrect type");
   LASSERT(a, a->cell[0]->count != 0, "Function 'head' passed {}");
@@ -291,7 +375,7 @@ Value* builtin_head(Value* a) {
   return v;
 }
 
-Value* builtin_init(Value *a) {
+Value* builtin_init(Env* e, Value *a) {
   LASSERT(a, a->count == 1, "Function 'init' passed too many arguments");
   LASSERT(a, a->cell[0]->type == QEXPR, "Function 'init' passed incorrect type");
   LASSERT(a, a->cell[0]->count != 0, "Function 'init' passed {}");
@@ -303,7 +387,7 @@ Value* builtin_init(Value *a) {
   return x;
 }
 
-Value* builtin_join(Value* a) {
+Value* builtin_join(Env* e, Value* a) {
   for (int i = 0; i < a->count; ++i)
     LASSERT(a, a->cell[i]->type == QEXPR, "Function 'join' passed incorrect type");
 
@@ -316,7 +400,7 @@ Value* builtin_join(Value* a) {
   return x;
 }
 
-Value* builtin_len(Value *a) {
+Value* builtin_len(Env* e, Value *a) {
   LASSERT(a, a->count == 1, "Function 'len' passed too many arguments");
   LASSERT(a, a->cell[0]->type == QEXPR, "Function 'len' passed incorrect type");
 
@@ -326,12 +410,12 @@ Value* builtin_len(Value *a) {
   return x;
 }
 
-Value* builtin_list(Value* a) {
+Value* builtin_list(Env* e, Value* a) {
   a->type = QEXPR;
   return a;
 }
 
-Value* builtin_tail(Value* a) {
+Value* builtin_tail(Env* e, Value* a) {
   LASSERT(a, a->count == 1, "Function 'tail' passed too many arguments");
   LASSERT(a, a->cell[0]->type == QEXPR, "Function 'tail' passed incorrect type");
   LASSERT(a, a->cell[0]->count != 0, "Function 'tail' passed {}");
@@ -343,24 +427,80 @@ Value* builtin_tail(Value* a) {
   return v;
 }
 
-Value* builtin(Value* a, char* func) {
-  if (strcmp("cons", func) == 0) return builtin_cons(a);
-  if (strcmp("eval", func) == 0) return builtin_eval(a);
-  if (strcmp("head", func) == 0) return builtin_head(a);
-  if (strcmp("init", func) == 0) return builtin_init(a);
-  if (strcmp("join", func) == 0) return builtin_join(a);
-  if (strcmp("len", func) == 0) return builtin_len(a);
-  if (strcmp("list", func) == 0) return builtin_list(a);
-  if (strcmp("tail", func) == 0) return builtin_tail(a);
-  if (strstr("+-/*", func)) return eval_op(a, func);
-  delete(a);
-  return error("Unknown function");
+Env* env_new(void) {
+  Env* e = malloc(sizeof(Env));
+  e->count = 0;
+  e->symbols = NULL;
+  e->values = NULL;
+  env_add_builtins(e);
+  return e;
+}
+
+void env_delete(Env* e) {
+  for (int i = 0; i < e->count; ++i) {
+    free(e->symbols[i]);
+    delete(e->values[i]);
+  }
+  free(e->symbols);
+  free(e->values);
+  free(e);
+}
+
+Value* env_get(Env* e, Value* k) {
+  for (int i = 0; i < e->count; ++i)
+    if (strcmp(e->symbols[i], k->symbol) == 0)
+      return copy(e->values[i]);
+  return error("Unbound symbol");
+}
+
+void env_put(Env *e, Value* k, Value* v) {
+  for (int i = 0; i < e->count; ++i) {
+    if (strcmp(e->symbols[i], k->symbol) == 0) {
+      delete(e->values[i]);
+      e->values[i] = copy(v);
+      return;
+    }
+  }
+
+  e->count++;
+  e->values = realloc(e->values, sizeof(Value*) * e->count);
+  e->symbols = realloc(e->symbols, sizeof(char*) * e->count);
+
+  e->values[e->count - 1] = copy(v);
+  e->symbols[e->count - 1] = malloc(strlen(k->symbol) + 1);
+  strcpy(e->symbols[e->count - 1], k->symbol);
+}
+
+void env_add_builtin(Env* e, char* name, Builtin func) {
+  Value* k = symbol(name);
+  Value* v = fun(func);
+  env_put(e, k, v);
+  delete(k);
+  delete(v);
+}
+
+void env_add_builtins(Env* e) {
+  env_add_builtin(e, "%", builtin_mod);
+  env_add_builtin(e, "*", builtin_mul);
+  env_add_builtin(e, "+", builtin_add);
+  env_add_builtin(e, "-", builtin_sub);
+  env_add_builtin(e, "/", builtin_div);
+  env_add_builtin(e, "cons", builtin_cons);
+  env_add_builtin(e, "eval", builtin_eval);
+  env_add_builtin(e, "head", builtin_head);
+  env_add_builtin(e, "init", builtin_init);
+  env_add_builtin(e, "join", builtin_join);
+  env_add_builtin(e, "len", builtin_len);
+  env_add_builtin(e, "list", builtin_list);
+  env_add_builtin(e, "tail", builtin_tail);
 }
 
 #ifdef EMSCRIPTEN
 EMSCRIPTEN_KEEPALIVE
 #endif
-char* run(char* input) {
+char* run(char* input, Env* e) {
+  if (e == NULL) e = env_new();
+
   char* output;
 
   str_builder_t* sb = str_builder_create();
@@ -376,8 +516,7 @@ char* run(char* input) {
     MPCA_LANG_DEFAULT,
     " \
       number : /-?[0-9]+/ ; \
-      symbol : \"list\" | \"head\" | \"tail\" | \"join\" | \"eval\" | \"len\" | \"cons\" | \"init\"  \
-             | '+' | '-' | '*' | '/' | '%' ; \
+      symbol : /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&%]+/ ;  \
       sexpr : '(' <expr>* ')' ; \
       qexpr : '{' <expr>* '}' ; \
       expr : <number> | <symbol> | <sexpr> | <qexpr> ; \
@@ -389,7 +528,7 @@ char* run(char* input) {
   mpc_result_t result;
 
   if (mpc_parse("<stdin>", input, Program, &result)) {
-    Value* x = eval(read(result.output));
+    Value* x = eval(e, read(result.output));
     str_builder_add_builder(sb, to_string(x), 0);
     delete(x);
     mpc_ast_delete(result.output);

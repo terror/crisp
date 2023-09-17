@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "str_builder.h"
 
 static const size_t str_builder_min_size = 32;

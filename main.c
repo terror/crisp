@@ -28,12 +28,16 @@ void add_history(char* unused) {}
 int main() {
   puts(":: crisp ::");
 
+  Env* env = env_new();
+
   for (;;) {
     char *input = readline("> ");
     add_history(input);
-    printf("%s\n", run(input));
+    printf("%s\n", run(input, env));
     free(input);
   }
+
+  env_delete(env);
 
   return 0;
 }

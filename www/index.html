@@ -39,7 +39,7 @@
           );
           const resultString = Module.UTF8ToString(resultPointer);
           Module._free(inputBuffer);
-          document.getElementById('result').innerHTML = resultString;
+          document.getElementById('result').innerText = resultString;
         } else {
           console.log(
             "WebAssembly module has not loaded yet, or 'run' function is not available."
