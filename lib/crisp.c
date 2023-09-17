@@ -447,7 +447,7 @@ Value *builtin_cons(Env *e, Value *a) {
           "Got %i, Expected %i.",
           a->count, 2);
 
-  LASSERT_TYPE("cons", a, 0, QEXPR);
+  LASSERT_TYPE("cons", a, 1, QEXPR);
 
   Value *x = pop(a, 0);
   Value *y = pop(a, 0);
