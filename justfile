@@ -11,8 +11,7 @@ clean:
   rm -rf a.out
 
 dev-deps:
-  brew tap oven-sh/bun
-  brew install bun emscripten
+  brew install emscripten criterion
 
 fmt:
   clang-format -i -style=file:.clang-format main.c lib/*.c
@@ -26,6 +25,9 @@ run:
 
 serve:
 	python3 -m http.server 8000 --directory ./www
+
+test:
+  gcc tests/unit.c lib/*.c -I/opt/homebrew/include -L/opt/homebrew/lib -lcriterion && ./a.out
 
 wasm:
   emcc lib/*.c \
