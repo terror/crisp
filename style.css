@@ -1,0 +1,48 @@
+body {
+  font-family: 'Inter', sans-serif;
+}
+
+@supports (font-variation-settings: normal) {
+  body {
+    font-family: 'Inter var', sans-serif;
+    font-feature-settings:
+      'ss01' 1,
+      'kern' 1,
+      'liga' 1,
+      'cv05' 1,
+      'tnum' 1;
+  }
+}
+
+p.bold-text {
+  font-weight: bold;
+}
+
+a.no-decoration {
+  text-decoration: none;
+  color: black;
+}
+
+.CodeMirror {
+  border: 1px solid #eee;
+}
+
+.editor-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.button-container {
+  display: flex;
+  margin-top: 0.5em;
+  margin-bottom: -0.5em;
+  justify-content: flex-end;
+}
+
+#result {
+  display: none;
+  font-family: 'Courier New', Courier, monospace;
+  border: 1px solid #ccc;
+  overflow-y: auto;
+  max-height: 200px;
+}
