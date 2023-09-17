@@ -18,6 +18,7 @@ Value* eval(Env* e, Value* v);
 Value* pop(Value* v, int i);
 str_builder_t* to_string(Value* v);
 void env_add_builtins(Env* e);
+void env_put(Env* e, Value* k, Value* v);
 
 #define LASSERT(args, cond, err) if (!(cond)) { delete(args); return error(err); }
 
@@ -353,6 +354,29 @@ Value* builtin_cons(Env* e, Value *a) {
   return y;
 }
 
+Value* builtin_def(Env* e, Value *a) {
+  LASSERT(a, a->cell[0]->type == QEXPR, "Function 'def' passed incorrect type");
+
+  Value* syms = a->cell[0];
+
+  for (int i = 0; i < syms->count; ++i)
+    LASSERT(a, syms->cell[i]->type == SYMBOL, "Function 'def' cannot define non-symbol");
+
+  LASSERT(
+    a,
+    syms->count == a->count - 1,
+    "Function 'def' cannot define incorrect number of values to symbols"
+  );
+
+  for (int i = 0; i < syms->count; ++i)
+    env_put(e, syms->cell[i], a->cell[i + 1]);
+
+  delete(a);
+
+  return sexpr();
+}
+
+
 Value* builtin_eval(Env* e, Value* a) {
   LASSERT(a, a->count == 1, "Function 'eval' passed too many arguments");
   LASSERT(a, a->cell[0]->type == QEXPR, "Function 'eval' passed incorrect type");
@@ -486,6 +510,7 @@ void env_add_builtins(Env* e) {
   env_add_builtin(e, "-", builtin_sub);
   env_add_builtin(e, "/", builtin_div);
   env_add_builtin(e, "cons", builtin_cons);
+  env_add_builtin(e, "def", builtin_def);
   env_add_builtin(e, "eval", builtin_eval);
   env_add_builtin(e, "head", builtin_head);
   env_add_builtin(e, "init", builtin_init);
