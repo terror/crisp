@@ -6,3 +6,43 @@
 Test(unit, math) {
   cr_assert(eq(str, run("(+ (% 3 2) (* 5 5 (+ 1 (/ 10 5))))", NULL), "76"));
 }
+
+Test(unit, cons) {
+  cr_assert(eq(str,
+               run("(cons 1 (cons 2 (cons 3 (cons 4 (cons 5 (cons 6 (cons 7 "
+                   "(cons 8 (cons 9 (cons 10 {}))))))))))",
+                   NULL),
+               "{1 2 3 4 5 6 7 8 9 10}"));
+}
+
+Test(unit, head) {
+  cr_assert(eq(str, run("(head {1 2 3 4 5 6 7 8 9 10})", NULL), "{1}"));
+}
+
+Test(unit, tail) {
+  cr_assert(eq(str, run("(tail {1 2 3 4 5 6 7 8 9 10})", NULL),
+               "{2 3 4 5 6 7 8 9 10}"));
+}
+
+Test(unit, init) {
+  cr_assert(eq(str, run("(init {1 2 3 4 5 6 7 8 9 10})", NULL),
+               "{1 2 3 4 5 6 7 8 9}"));
+}
+
+Test(unit, list) {
+  cr_assert(eq(str, run("(list 1 2 3 4 5 6 7 8 9 10)", NULL),
+               "{1 2 3 4 5 6 7 8 9 10}"));
+}
+
+Test(unit, len) {
+  cr_assert(eq(str, run("(len {1 2 3 4 5 6 7 8 9 10})", NULL), "10"));
+}
+
+Test(unit, join) {
+  cr_assert(eq(str, run("(join {1 2 3 4 5} {6 7 8 9 10})", NULL),
+               "{1 2 3 4 5 6 7 8 9 10}"));
+}
+
+Test(unit, eval) {
+  cr_assert(eq(str, run("(eval (cons + (cons 1 (cons 2 {}))))", NULL), "3"));
+}

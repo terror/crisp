@@ -521,7 +521,7 @@ Value *builtin_join(Env *e, Value *a) {
   Value *x = pop(a, 0);
 
   while (a->count)
-    x = add(x, pop(a, 0));
+    x = join(x, pop(a, 0));
 
   delete (a);
 

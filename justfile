@@ -11,11 +11,15 @@ clean:
   rm -rf a.out
 
 dev-deps:
-  brew install emscripten criterion
+  brew install emscripten criterion ripgrep
 
 fmt:
   clang-format -i -style=file:.clang-format main.c lib/*.c
   prettier --write .
+
+fmt-check:
+  clang-format --dry-run --Werror main.c lib/*.c
+  prettier --check .
 
 forbid:
   ./bin/forbid
