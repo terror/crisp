@@ -29,7 +29,6 @@ a.no-decoration {
 
 .editor-container {
   display: flex;
-  width: 50%;
   flex-direction: column;
 }
 
@@ -43,7 +42,6 @@ a.no-decoration {
 #result {
   display: none;
   font-family: 'Courier New', Courier, monospace;
-  width: 50%;
   border: 1px solid #ccc;
   overflow-y: auto;
   max-height: 200px;
