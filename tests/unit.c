@@ -56,3 +56,21 @@ Test(unit, partial_evaluation) {
   cr_assert(eq(str, run("def {add-one} (add 1)", env), "()"));
   cr_assert(eq(str, run("add-one 1", env), "2"));
 }
+
+Test(unit, comparison) {
+  cr_assert(eq(str, run("(== 1 1)", NULL), "1"));
+  cr_assert(eq(str, run("(== 1 2)", NULL), "0"));
+  cr_assert(eq(str, run("(< 1 2)", NULL), "1"));
+  cr_assert(eq(str, run("(< 2 1)", NULL), "0"));
+  cr_assert(eq(str, run("(> 1 2)", NULL), "0"));
+  cr_assert(eq(str, run("(> 2 1)", NULL), "1"));
+  cr_assert(eq(str, run("(<= 1 2)", NULL), "1"));
+  cr_assert(eq(str, run("(<= 2 1)", NULL), "0"));
+  cr_assert(eq(str, run("(>= 1 2)", NULL), "0"));
+  cr_assert(eq(str, run("(>= 2 1)", NULL), "1"));
+}
+
+Test(unit, if_statement) {
+  cr_assert(eq(str, run("(if (== 1 1) {1} {0})", NULL), "1"));
+  cr_assert(eq(str, run("(if (== 1 2) {1} {0})", NULL), "0"));
+}

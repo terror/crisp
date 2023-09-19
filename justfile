@@ -28,7 +28,7 @@ run:
   gcc -std=c99 -Wall main.c lib/*.c -lreadline -lm && ./a.out
 
 serve:
-	python3 -m http.server 8000 --directory ./www
+  python3 -m http.server 8000 --directory ./www
 
 test:
   gcc tests/unit.c lib/*.c -I/opt/homebrew/include -L/opt/homebrew/lib -lcriterion && ./a.out

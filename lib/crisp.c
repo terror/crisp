@@ -418,6 +418,34 @@ Value *call(Env *e, Value *f, Value *a) {
   }
 }
 
+int eq(Value *x, Value *y) {
+  if (x->type != y->type)
+    return 0;
+
+  switch (x->type) {
+  case ERROR:
+    return strcmp(x->error, y->error) == 0;
+  case FUNCTION:
+    if (x->builtin || y->builtin)
+      return x->builtin == y->builtin;
+    return eq(x->args, y->args) && eq(x->body, y->body);
+  case NUMBER:
+    return x->number == y->number;
+  case SYMBOL:
+    return strcmp(x->symbol, y->symbol) == 0;
+  case SEXPR:
+  case QEXPR:
+    if (x->count != y->count)
+      return 0;
+    for (int i = 0; i < x->count; ++i)
+      if (!eq(x->cell[i], y->cell[i]))
+        return 0;
+    return 1;
+  }
+
+  return 0;
+}
+
 char *type_name(int t) {
   switch (t) {
   case ERROR:
@@ -621,6 +649,90 @@ Value *builtin_var(Env *e, Value *a, char *func) {
 Value *builtin_put(Env *e, Value *a) { return builtin_var(e, a, "="); }
 Value *builtin_def(Env *e, Value *a) { return builtin_var(e, a, "def"); }
 
+Value *builtin_exit(Env *e, Value *a) { exit(0); }
+
+Value *builtin_ord(Env *e, Value *a, char *op) {
+  LASSERT(a, a->count == 2,
+          "Function '%s' passed too many arguments. "
+          "Got %i, Expected %i.",
+          op, a->count, 2);
+
+  LASSERT_TYPE(op, a, 0, NUMBER);
+  LASSERT_TYPE(op, a, 1, NUMBER);
+
+  int r;
+
+  if (strcmp(op, ">") == 0)
+    r = a->cell[0]->number > a->cell[1]->number;
+  if (strcmp(op, "<") == 0)
+    r = a->cell[0]->number < a->cell[1]->number;
+  if (strcmp(op, ">=") == 0)
+    r = a->cell[0]->number >= a->cell[1]->number;
+  if (strcmp(op, "<=") == 0)
+    r = a->cell[0]->number <= a->cell[1]->number;
+  if (strcmp(op, "==") == 0)
+    r = a->cell[0]->number == a->cell[1]->number;
+
+  delete (a);
+
+  return number(r);
+}
+
+Value *builtin_gt(Env *e, Value *a) { return builtin_ord(e, a, ">"); }
+
+Value *builtin_lt(Env *e, Value *a) { return builtin_ord(e, a, "<"); }
+
+Value *builtin_ge(Env *e, Value *a) { return builtin_ord(e, a, ">="); }
+
+Value *builtin_le(Env *e, Value *a) { return builtin_ord(e, a, "<="); }
+
+Value *builtin_cmp(Env *e, Value *a, char *op) {
+  LASSERT(a, a->count == 2,
+          "Function '%s' passed too many arguments. "
+          "Got %i, Expected %i.",
+          op, a->count, 2);
+
+  int r;
+
+  if (strcmp(op, "==") == 0)
+    r = eq(a->cell[0], a->cell[1]);
+
+  if (strcmp(op, "!=") == 0)
+    r = !eq(a->cell[0], a->cell[1]);
+
+  delete (a);
+
+  return number(r);
+}
+
+Value *builtin_eq(Env *e, Value *a) { return builtin_cmp(e, a, "=="); }
+
+Value *builtin_ne(Env *e, Value *a) { return builtin_cmp(e, a, "!="); }
+
+Value *builtin_if(Env *e, Value *a) {
+  LASSERT(a, a->count == 3,
+          "Function 'if' passed too many arguments. "
+          "Got %i, Expected %i.",
+          a->count, 3);
+
+  LASSERT_TYPE("if", a, 0, NUMBER);
+  LASSERT_TYPE("if", a, 1, QEXPR);
+  LASSERT_TYPE("if", a, 2, QEXPR);
+
+  Value *x;
+  a->cell[1]->type = SEXPR;
+  a->cell[2]->type = SEXPR;
+
+  if (a->cell[0]->number)
+    x = eval(e, pop(a, 1));
+  else
+    x = eval(e, pop(a, 2));
+
+  delete (a);
+
+  return x;
+}
+
 Env *env_new(void) {
   Env *e = malloc(sizeof(Env));
   e->count = 0;
@@ -698,17 +810,25 @@ void env_add_builtin(Env *e, char *name, Builtin func) {
 }
 
 void env_add_builtins(Env *e) {
+  env_add_builtin(e, "!=", builtin_ne);
   env_add_builtin(e, "%", builtin_mod);
   env_add_builtin(e, "*", builtin_mul);
   env_add_builtin(e, "+", builtin_add);
   env_add_builtin(e, "-", builtin_sub);
   env_add_builtin(e, "/", builtin_div);
+  env_add_builtin(e, "<", builtin_lt);
+  env_add_builtin(e, "<=", builtin_le);
   env_add_builtin(e, "=", builtin_put);
+  env_add_builtin(e, "==", builtin_eq);
+  env_add_builtin(e, ">", builtin_gt);
+  env_add_builtin(e, ">=", builtin_ge);
   env_add_builtin(e, "\\", builtin_lambda);
   env_add_builtin(e, "cons", builtin_cons);
   env_add_builtin(e, "def", builtin_def);
   env_add_builtin(e, "eval", builtin_eval);
+  env_add_builtin(e, "exit", builtin_exit);
   env_add_builtin(e, "head", builtin_head);
+  env_add_builtin(e, "if", builtin_if);
   env_add_builtin(e, "init", builtin_init);
   env_add_builtin(e, "join", builtin_join);
   env_add_builtin(e, "len", builtin_len);

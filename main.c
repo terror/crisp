@@ -29,8 +29,6 @@ int main() {
 
   for (;;) {
     char *input = readline("> ");
-    if (strcmp(input, "exit") == 0)
-      break;
     add_history(input);
     printf("%s\n", run(input, env));
     free(input);
