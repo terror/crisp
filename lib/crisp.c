@@ -39,7 +39,7 @@ void env_put(Env *e, Value *k, Value *v);
           "Got %s, Expected %s.",                                              \
           func, index, type_name(args->cell[index]->type), type_name(expect))
 
-enum { ERROR, FUNCTION, NUMBER, QEXPR, SEXPR, SYMBOL };
+enum { ERROR, FUNCTION, NUMBER, QEXPR, SEXPR, SYMBOL, STRING };
 
 typedef Value *(*Builtin)(Env *, Value *);
 
@@ -49,6 +49,7 @@ struct Value {
   Value *args;
   Value *body;
   char *error;
+  char *string;
   char *symbol;
   int count;
   int type;
@@ -130,6 +131,24 @@ Value *lambda(Value *args, Value *body) {
   return v;
 }
 
+Value *string(char *s) {
+  Value *v = malloc(sizeof(Value));
+  v->type = STRING;
+  v->string = malloc(strlen(s) + 1);
+  strcpy(v->string, s);
+  return v;
+}
+
+Value *read_string(mpc_ast_t *t) {
+  t->contents[strlen(t->contents) - 1] = '\0';
+  char *unescaped = malloc(strlen(t->contents + 1) + 1);
+  strcpy(unescaped, t->contents + 1);
+  unescaped = mpcf_unescape(unescaped);
+  Value *str = string(unescaped);
+  free(unescaped);
+  return str;
+}
+
 Value *add(Value *a, Value *b) {
   a->count++;
   a->cell = realloc(a->cell, sizeof(Value *) * a->count);
@@ -140,8 +159,12 @@ Value *add(Value *a, Value *b) {
 Value *read(mpc_ast_t *t) {
   if (strstr(t->tag, "number"))
     return parse_number(t);
+
   if (strstr(t->tag, "symbol"))
     return symbol(t->contents);
+
+  if (strstr(t->tag, "string"))
+    return read_string(t);
 
   Value *x = NULL;
 
@@ -152,12 +175,16 @@ Value *read(mpc_ast_t *t) {
     x = qexpr();
 
   for (int i = 0; i < t->children_num; ++i) {
+    if (strstr(t->children[i]->tag, "comment"))
+      continue;
+
     if (strcmp(t->children[i]->contents, "(") == 0 ||
         strcmp(t->children[i]->contents, ")") == 0 ||
         strcmp(t->children[i]->contents, "}") == 0 ||
         strcmp(t->children[i]->contents, "{") == 0 ||
         strcmp(t->children[i]->tag, "regex") == 0)
       continue;
+
     x = add(x, read(t->children[i]));
   }
 
@@ -187,6 +214,9 @@ void delete(Value *v) {
   case SYMBOL:
     free(v->symbol);
     break;
+  case STRING:
+    free(v->string);
+    break;
   }
 
   free(v);
@@ -198,6 +228,13 @@ Value *join(Value *x, Value *y) {
   free(y->cell);
   free(y);
   return x;
+}
+
+char *espace_string(Value *v) {
+  char *escaped = malloc(strlen(v->string) + 1);
+  strcpy(escaped, v->string);
+  escaped = mpcf_escape(escaped);
+  return escaped;
 }
 
 str_builder_t *to_string_helper(Value *v, char open, char close) {
@@ -246,6 +283,11 @@ str_builder_t *to_string(Value *v) {
       str_builder_add_builder(output, to_string(v->body), 0);
       str_builder_add_char(output, ')');
     }
+    break;
+  case STRING:
+    str_builder_add_char(output, '"');
+    str_builder_add_str(output, espace_string(v), 0);
+    str_builder_add_char(output, '"');
     break;
   }
 
@@ -299,6 +341,10 @@ Value *copy(Value *v) {
     x->cell = malloc(sizeof(Value *) * x->count);
     for (int i = 0; i < x->count; ++i)
       x->cell[i] = copy(v->cell[i]);
+    break;
+  case STRING:
+    x->string = malloc(strlen(v->string) + 1);
+    strcpy(x->string, v->string);
     break;
   }
 
@@ -441,6 +487,8 @@ int eq(Value *x, Value *y) {
       if (!eq(x->cell[i], y->cell[i]))
         return 0;
     return 1;
+  case STRING:
+    return strcmp(x->string, y->string) == 0;
   }
 
   return 0;
@@ -460,6 +508,8 @@ char *type_name(int t) {
     return "S-Expression";
   case SYMBOL:
     return "Symbol";
+  case STRING:
+    return "String";
   default:
     return "Unknown";
   }
@@ -849,6 +899,8 @@ char *run(char *input, Env *e) {
 
   mpc_parser_t *Number = mpc_new("number");
   mpc_parser_t *Symbol = mpc_new("symbol");
+  mpc_parser_t *String = mpc_new("string");
+  mpc_parser_t *Comment = mpc_new("comment");
   mpc_parser_t *Sexpr = mpc_new("sexpr");
   mpc_parser_t *Qexpr = mpc_new("qexpr");
   mpc_parser_t *Expr = mpc_new("expr");
@@ -857,12 +909,14 @@ char *run(char *input, Env *e) {
   mpca_lang(MPCA_LANG_DEFAULT, " \
       number : /-?[0-9]+/ ; \
       symbol : /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&%]+/ ;  \
+      string : /\"(\\\\.|[^\"])*\"/ ; \
+      comment : /;[^\\r\\n]*/ ; \
       sexpr : '(' <expr>* ')' ; \
       qexpr : '{' <expr>* '}' ; \
-      expr : <number> | <symbol> | <sexpr> | <qexpr> ; \
+      expr : <number> | <symbol> | <string> | <comment> | <sexpr> | <qexpr> ; \
       program : /^/ <expr>* /$/ ; \
     ",
-            Number, Symbol, Sexpr, Qexpr, Expr, Program);
+            Number, Symbol, String, Comment, Sexpr, Qexpr, Expr, Program);
 
   mpc_result_t result;
 
@@ -876,7 +930,7 @@ char *run(char *input, Env *e) {
     mpc_err_delete(result.error);
   }
 
-  mpc_cleanup(6, Number, Symbol, Sexpr, Qexpr, Expr, Program);
+  mpc_cleanup(8, Number, Symbol, String, Comment, Sexpr, Qexpr, Expr, Program);
 
   output = str_builder_dump(sb, NULL);
   str_builder_destroy(sb);

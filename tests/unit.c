@@ -74,3 +74,7 @@ Test(unit, if_statement) {
   cr_assert(eq(str, run("(if (== 1 1) {1} {0})", NULL), "1"));
   cr_assert(eq(str, run("(if (== 1 2) {1} {0})", NULL), "0"));
 }
+
+Test(unit, strings) {
+  cr_assert(eq(str, run("\"hello\"", NULL), "\"hello\""));
+}
